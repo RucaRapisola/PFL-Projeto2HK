@@ -5,6 +5,12 @@
 import Data.List (intercalate)
 import Data.List (sortBy)
 import Data.Ord (comparing)
+import Data.Text (strip, pack, unpack)
+import Data.Char (isDigit, isAlpha)
+import Text.Parsec hiding (State, parse)
+import Text.Parsec.String (Parser)
+import Text.Parsec.Language (emptyDef)
+import qualified Text.Parsec.Token as Token
 
 -- Definition of Inst and Code
 data Inst =
@@ -109,19 +115,54 @@ testAssembler code = (stack2Str stack, state2Str state)
 
 -- Part 2
 
--- TODO: Define the types Aexp, Bexp, Stm and Program
 
--- compA :: Aexp -> Code
-compA = undefined -- TODO
+-- Definition of Aexp and Bexp
+-- Aexp
+data Aexp = Num Integer | Var String | AddA Aexp Aexp | SubA Aexp Aexp | MultA Aexp Aexp deriving Show
+
+-- Bexp
+data Bexp = BTrue | BFalse | Eq Aexp Aexp | Leq Aexp Aexp | AndB Bexp Bexp | NotB Bexp deriving Show
+
+data Stm =  Aexp | Bexp
+
+-- Definition of Program
+type Program = Aexp
+
+compA :: Aexp -> Code
+compA (Num n) = [Push n]
+compA (Var var) = [Fetch var]
+compA (AddA a1 a2) = compA a1 ++ compA a2 ++ [Add]
+compA (SubA a1 a2) = compA a1 ++ compA a2 ++ [Sub]
+compA (MultA a1 a2) = compA a1 ++ compA a2 ++ [Mult]
+
 
 -- compB :: Bexp -> Code
 compB = undefined -- TODO
 
--- compile :: Program -> Code
-compile = undefined -- TODO
+compile :: Program -> Code
+compile = compA
 
--- parse :: String -> Program
-parse = undefined -- TODO
+parse :: String -> Program
+parse = parseAexp . myLexer
+
+-- Parser
+parseAexp :: [String] -> Aexp
+parseAexp [x, "+", y] = AddA (parseAexp [x]) (parseAexp [y])
+parseAexp [x, "-", y] = SubA (parseAexp [x]) (parseAexp [y])
+parseAexp [x, "*", y] = MultA (parseAexp [x]) (parseAexp [y])
+parseAexp [x] = if all isDigit x then Num (read x) else Var x
+parseAexp _ = error "Invalid expression"
+
+
+myLexer :: String -> [String]
+myLexer = words . map replace
+  where
+    replace ';' = ' '
+    replace c = c
+
+-- Examples:
+-- testParser("3 + 1") == ("","4") -> é o unico que da
+
 
 -- To help you test your parser
 testParser :: String -> (String, String)
