@@ -126,7 +126,7 @@ data Bexp = BTrue | BFalse | Eq Aexp Aexp | Leq Aexp Aexp | AndB Bexp Bexp | Not
 data Stm =  Aexp | Bexp | Assign String Aexp | Skip | If Bexp Stm Stm | While Bexp Stm deriving Show
 
 -- Definition of Program
-type Program = Stm
+type Program = [Stm]
 
 compA :: Aexp -> Code
 compA (Num n) = [Push n]
@@ -146,10 +146,11 @@ compB (NotB b) = compB b ++ [Neg]
 
 
 compile :: Program -> Code
-compile (Assign var aexp) = compA aexp ++ [Store var]
+compile [] = []
+compile (Assign var aexp : stms) = compA aexp ++ [Store var] ++ compile stms
 
 parse :: String -> Program
-parse = parseStm . myLexer
+parse = map parseStm . myLexer
 
 -- Parser
 
@@ -165,15 +166,10 @@ parseAexp [x] = if all isDigit x then Num (read x) else Var x
 parseAexp _ = error "Invalid expression"
 
 
-myLexer :: String -> [String]
-myLexer = words . map replace
-  where
-    replace ';' = ' '
-    replace c = c
-
--- Examples:
--- testParser("x := 5") == ("","x=5")
--- testParser("x := 5 - 1") == ("","x=4")
+myLexer :: String -> [[String]]
+myLexer s = case break (== ';') s of
+    (left, ';':right) -> if null (words left) then myLexer right else words left : myLexer right
+    (left, _) -> if null (words left) then [] else [words left]
 
 
 
