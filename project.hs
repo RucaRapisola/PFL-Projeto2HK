@@ -123,10 +123,10 @@ data Aexp = Num Integer | Var String | AddA Aexp Aexp | SubA Aexp Aexp | MultA A
 -- Bexp
 data Bexp = BTrue | BFalse | Eq Aexp Aexp | Leq Aexp Aexp | AndB Bexp Bexp | NotB Bexp deriving Show
 
-data Stm =  Aexp | Bexp
+data Stm =  Aexp | Bexp | Assign String Aexp | Skip | If Bexp Stm Stm | While Bexp Stm deriving Show
 
 -- Definition of Program
-type Program = Aexp
+type Program = Stm
 
 compA :: Aexp -> Code
 compA (Num n) = [Push n]
@@ -140,12 +140,17 @@ compA (MultA a1 a2) = compA a1 ++ compA a2 ++ [Mult]
 compB = undefined -- TODO
 
 compile :: Program -> Code
-compile = compA
+compile (Assign var aexp) = compA aexp ++ [Store var]
 
 parse :: String -> Program
-parse = parseAexp . myLexer
+parse = parseStm . myLexer
 
 -- Parser
+
+parseStm :: [String] -> Stm
+parseStm [x, ":=", y] = Assign x (parseAexp [y])
+
+
 parseAexp :: [String] -> Aexp
 parseAexp [x, "+", y] = AddA (parseAexp [x]) (parseAexp [y])
 parseAexp [x, "-", y] = SubA (parseAexp [x]) (parseAexp [y])
@@ -161,7 +166,8 @@ myLexer = words . map replace
     replace c = c
 
 -- Examples:
--- testParser("3 + 1") == ("","4") -> é o unico que da
+-- testParser("3 + 1") == ("","4") 
+-- testParser("x := 5") == ("","x=4")
 
 
 -- To help you test your parser
