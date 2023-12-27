@@ -148,6 +148,7 @@ compB (NotB b) = compB b ++ [Neg]
 compile :: Program -> Code
 compile [] = []
 compile (Assign var aexp : stms) = compA aexp ++ [Store var] ++ compile stms
+compile (If bexp trueBranch falseBranch : stms) = compB bexp ++ [Branch (compile [trueBranch]) (compile [falseBranch])] ++ compile stms
 
 parse :: String -> Program
 parse = map parseStm . myLexer
@@ -156,7 +157,28 @@ parse = map parseStm . myLexer
 
 parseStm :: [String] -> Stm
 parseStm (x : ":=" : ys) = Assign x (parseAexp ys)
-parseStm _ = error "Invalid statement"
+parseStm ("if" : rest ) = If (parseBexp condition) (parseStm trueBranch) (parseStm falseBranch)
+  where
+    (condition, trueBranch, falseBranch) = parseIf rest
+parseStm xs = error $ "Invalid statement: " ++ unwords xs
+
+parseIf :: [String] -> ([String], [String], [String])
+parseIf xs = (condition, trueBranch, falseBranch)
+  where
+    (condition, rest) = parseCondition xs
+    (trueBranch, falseBranch) = parseBranch rest
+
+parseCondition :: [String] -> ([String], [String])
+parseCondition xs = (condition, tail rest) 
+  where
+    (condition, rest) = break (== "then") xs
+
+parseBranch :: [String] -> ([String], [String])
+parseBranch xs = (trueBranch, tail rest) 
+  where
+    (trueBranch, rest) = break (== "else") xs
+
+
 
 parseAexp :: [String] -> Aexp
 parseAexp [x, "+", y] = AddA (parseAexp [x]) (parseAexp [y])
@@ -165,6 +187,17 @@ parseAexp [x, "*", y] = MultA (parseAexp [x]) (parseAexp [y])
 parseAexp [x] = if all isDigit x then Num (read x) else Var x
 parseAexp _ = error "Invalid expression"
 
+
+parseBexp :: [String] -> Bexp
+parseBexp ["not", x] = NotB (parseBexp [x])
+parseBexp (x : "==" : y : xs) = Eq (parseAexp [x]) (parseAexp [y])
+parseBexp (x : "<=" : y : xs) = Leq (parseAexp [x]) (parseAexp [y])
+parseBexp (x : "and" : y : xs) = AndB (parseBexp [x]) (parseBexp [y])
+parseBexp ["True"] = BTrue
+parseBexp ["False"] = BFalse
+parseBexp xs = error $ "Invalid bool expression: " ++ unwords xs
+
+-- Lexer
 
 myLexer :: String -> [[String]]
 myLexer s = case break (== ';') s of
@@ -179,7 +212,9 @@ testParser programCode = (stack2Str stack, state2Str state)
   where (_,stack,state) = run(compile (parse programCode), createEmptyStack, createEmptyState)
 
 -- Examples:
--- testParser "x := 5; x := x - 1;" == ("","x=4")
+-- testParser "x := 5; x := x - 1;" == ("","x=4") -> funciona
+-- testParser "if True then x := 1 else x := 2" == ("","x=1") -> funciona
+-- testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2")
 -- testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1 else y := 2" == ("","y=2")
 -- testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;)" == ("","x=1")
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1;" == ("","x=2")
