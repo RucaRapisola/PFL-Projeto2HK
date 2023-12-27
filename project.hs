@@ -132,12 +132,18 @@ compA :: Aexp -> Code
 compA (Num n) = [Push n]
 compA (Var var) = [Fetch var]
 compA (AddA a1 a2) = compA a1 ++ compA a2 ++ [Add]
-compA (SubA a1 a2) = compA a1 ++ compA a2 ++ [Sub]
+compA (SubA a1 a2) = compA a2 ++ compA a1 ++ [Sub]
 compA (MultA a1 a2) = compA a1 ++ compA a2 ++ [Mult]
 
 
--- compB :: Bexp -> Code
-compB = undefined -- TODO
+compB :: Bexp -> Code
+compB BTrue = [Tru]
+compB BFalse = [Fals]
+compB (Eq a1 a2) = compA a1 ++ compA a2 ++ [Equ]
+compB (Leq a1 a2) = compA a1 ++ compA a2 ++ [Le]
+compB (AndB b1 b2) = compB b1 ++ compB b2 ++ [And]
+compB (NotB b) = compB b ++ [Neg]
+
 
 compile :: Program -> Code
 compile (Assign var aexp) = compA aexp ++ [Store var]
@@ -148,8 +154,8 @@ parse = parseStm . myLexer
 -- Parser
 
 parseStm :: [String] -> Stm
-parseStm [x, ":=", y] = Assign x (parseAexp [y])
-
+parseStm (x : ":=" : ys) = Assign x (parseAexp ys)
+parseStm _ = error "Invalid statement"
 
 parseAexp :: [String] -> Aexp
 parseAexp [x, "+", y] = AddA (parseAexp [x]) (parseAexp [y])
@@ -166,8 +172,9 @@ myLexer = words . map replace
     replace c = c
 
 -- Examples:
--- testParser("3 + 1") == ("","4") 
--- testParser("x := 5") == ("","x=4")
+-- testParser("x := 5") == ("","x=5")
+-- testParser("x := 5 - 1") == ("","x=4")
+
 
 
 -- To help you test your parser
