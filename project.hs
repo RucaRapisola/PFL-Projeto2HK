@@ -80,18 +80,7 @@ run ((Branch trueBranch falseBranch):code, x:stack, state) =
   if intToBool x
   then run (trueBranch ++ code, stack, state)
   else run (falseBranch ++ code, stack, state)
-
---not working still (factorial run class)
-run ((Loop loopCode breakCode):code, stack, state) = loop (loopCode, breakCode, code, stack, state)
-  where
-    loop (lCode, bCode, restCode, s, st) =
-      let (_, conditionStack, _) = run (bCode, s, st) in
-      case conditionStack of
-        (cond:cs) -> if intToBool cond
-                     then run (restCode, cs, st)
-                     else let (_, newStack, newState) = run (lCode, s, st) in
-                          loop (lCode, bCode, restCode, newStack, newState)
-        [] -> error "Condition stack is empty in Loop"
+run ((Loop condition loopcode):code, stack, state) = run ( condition ++ [Branch (loopcode ++ [Loop condition loopcode]) code] ++ code, stack, state)
 
 
 run (inst:_, _, _) = error ("Unrecognized instruction: " ++ show inst)
