@@ -136,62 +136,116 @@ compB (NotB b) = compB b ++ [Neg]
 
 compile :: Program -> Code
 compile [] = []
-compile (Assign var aexp : stms) = compA aexp ++ [Store var] ++ compile stms
-compile (If bexp trueBranch falseBranch : stms) = compB bexp ++ [Branch (compile [trueBranch]) (compile [falseBranch])] ++ compile stms
+compile (Assign var aexp : stms ) = compA aexp ++ [Store var]  ++ compile stms 
 
 parse :: String -> Program
-parse = map parseStm . myLexer
+parse = parseStms . myLexer
 
 -- Parser
 
-parseStm :: [String] -> Stm
-parseStm (x : ":=" : ys) = Assign x (parseAexp ys)
-parseStm ("if" : rest ) = If (parseBexp condition) (parseStm trueBranch) (parseStm falseBranch)
-  where
-    (condition, trueBranch, falseBranch) = parseIf rest
-parseStm xs = error $ "Invalid statement: " ++ unwords xs
-
-parseIf :: [String] -> ([String], [String], [String])
-parseIf xs = (condition, trueBranch, falseBranch)
-  where
-    (condition, rest) = parseCondition xs
-    (trueBranch, falseBranch) = parseBranch rest
-
-parseCondition :: [String] -> ([String], [String])
-parseCondition xs = (condition, tail rest) 
-  where
-    (condition, rest) = break (== "then") xs
-
-parseBranch :: [String] -> ([String], [String])
-parseBranch xs = (trueBranch, tail rest) 
-  where
-    (trueBranch, rest) = break (== "else") xs
+parseStms :: [Token] -> Program
+parseStms [] = []
+parseStms tokens = case tokens of
+  (TVar var : TAssign : ts) ->
+    case parseSubOrSumOrProdOrIntOrPar ts of
+      Just (exp, TSemiColon : rest) -> Assign var exp : parseStms rest
+      _ -> error "Invalid syntax"
 
 
+parseInt :: [Token] -> Maybe (Aexp , [Token])
+parseInt (TNum n : xs) = Just (Num n, xs)
+parseInt _ = Nothing
 
-parseAexp :: [String] -> Aexp
-parseAexp [x, "+", y] = AddA (parseAexp [x]) (parseAexp [y])
-parseAexp [x, "-", y] = SubA (parseAexp [x]) (parseAexp [y])
-parseAexp [x, "*", y] = MultA (parseAexp [x]) (parseAexp [y])
-parseAexp [x] = if all isDigit x then Num (read x) else Var x
-parseAexp _ = error "Invalid expression"
+parseSubOrSumOrProdOrIntOrPar :: [Token] -> Maybe (Aexp , [Token])
+parseSubOrSumOrProdOrIntOrPar xs = case parseSumOrProdOrIntOrPar xs of
+  Just (stm, TMinus : rest) -> case parseSubOrSumOrProdOrIntOrPar rest of
+    Just (stm2, rest2) -> Just (SubA stm stm2, rest2)
+    _ -> Nothing
+  result -> result
 
+parseSumOrProdOrIntOrPar :: [Token] -> Maybe (Aexp , [Token])
+parseSumOrProdOrIntOrPar xs = case parseProdOrIntOrPar xs of
+  Just (stm, TPlus : rest) -> case parseSumOrProdOrIntOrPar rest of
+    Just (stm2, rest2) -> Just (AddA stm stm2, rest2)
+    _ -> Nothing
+  result -> result
 
-parseBexp :: [String] -> Bexp
-parseBexp ["not", x] = NotB (parseBexp [x])
-parseBexp (x : "==" : y : xs) = Eq (parseAexp [x]) (parseAexp [y])
-parseBexp (x : "<=" : y : xs) = Leq (parseAexp [x]) (parseAexp [y])
-parseBexp (x : "and" : y : xs) = AndB (parseBexp [x]) (parseBexp [y])
-parseBexp ["True"] = BTrue
-parseBexp ["False"] = BFalse
-parseBexp xs = error $ "Invalid bool expression: " ++ unwords xs
+parseProdOrIntOrPar :: [Token] -> Maybe (Aexp , [Token])
+parseProdOrIntOrPar xs = case parseIntOrPar xs of
+  Just (stm, TTimes : rest) -> case parseProdOrIntOrPar rest of
+    Just (stm2, rest2) -> Just (MultA stm stm2, rest2)
+    _ -> Nothing
+  result -> result
+
+parseVar :: [Token] -> Maybe (Aexp , [Token])
+parseVar (TVar v : xs) = Just (Var v, xs)
+parseVar _ = Nothing
+
+parseIntOrPar :: [Token] -> Maybe (Aexp , [Token])
+parseIntOrPar (TOpenPar : xs) = case parseSubOrSumOrProdOrIntOrPar xs of
+  Just (stm, TClosePar : rest) -> Just (stm, rest)
+  _ -> Nothing
+parseIntOrPar xs = parseInt xs `orElse` parseVar xs
+
+orElse :: Maybe a -> Maybe a -> Maybe a
+orElse (Just x) _ = Just x
+orElse Nothing y = y
+
 
 -- Lexer
 
-myLexer :: String -> [[String]]
-myLexer s = case break (== ';') s of
-    (left, ';':right) -> if null (words left) then myLexer right else words left : myLexer right
-    (left, _) -> if null (words left) then [] else [words left]
+data Token 
+    = TAssign
+    | TIf
+    | TThen
+    | TElse
+    | TTrue
+    | TFalse
+    | TNot
+    | TAnd
+    | TLe
+    | TDo
+    | TEqu
+    | TPlus
+    | TMinus
+    | TTimes
+    | TWhile
+    | TOpenPar
+    | TClosePar
+    | TSemiColon
+    | TVar String
+    | TNum Integer
+    deriving (Show, Eq)
+
+myLexer :: String -> [Token]
+myLexer [] = []
+myLexer (x:xs) 
+    | x == ' ' = myLexer xs
+    | x == ';' = TSemiColon : myLexer xs
+    | x == '(' = TOpenPar : myLexer xs
+    | x == ')' = TClosePar : myLexer xs
+    | x == '+' = TPlus : myLexer xs
+    | x == '-' = TMinus : myLexer xs
+    | x == '*' = TTimes : myLexer xs
+    | x == '=' = TEqu : myLexer xs
+    | x == '<' = TLe : myLexer xs
+    | x == '!' = TNot : myLexer xs
+    | x == ':' && take 1 xs == "=" = TAssign : myLexer (drop 1 xs)
+    | x == 'i' && take 5 xs == "fnot " = TIf : TNot : myLexer (drop 5 xs)
+    | x == 'i' && take 2 xs == "f " = TIf : myLexer (drop 2 xs)
+    | x == 't' && take 4 xs == "hen " = TThen : myLexer (drop 4 xs)
+    | x == 'e' && take 4 xs == "lse " = TElse : myLexer (drop 4 xs)
+    | x == 't' && take 4 xs == "rue " = TTrue : myLexer (drop 4 xs)
+    | x == 'f' && take 5 xs == "alse " = TFalse : myLexer (drop 5 xs)
+    | x == 'w' && take 5 xs == "hile " = TWhile : myLexer (drop 5 xs)
+    | x == 'd' && take 2 xs == "o" = TDo : myLexer (drop 2 xs)
+    | x == 'n' && take 3 xs == "ot " = TNot : myLexer (drop 3 xs)
+    | x == 'T' && take 4 xs == "rue " = TTrue : TSemiColon : myLexer (drop 4 xs)
+    | x == 'F' && take 5 xs == "alse " = TFalse : TSemiColon : myLexer (drop 5 xs)
+    | x == 'a' && take 3 xs == "nd " = TAnd : myLexer (drop 3 xs)
+    | isDigit x = TNum (read (x : takeWhile isDigit xs)) : myLexer (dropWhile isDigit xs)
+    | isAlpha x = TVar (x : takeWhile isAlpha xs) : myLexer (dropWhile isAlpha xs)
+    | otherwise = error ("Unrecognized token: " ++ [x])
 
 
 
@@ -201,12 +255,15 @@ testParser programCode = (stack2Str stack, state2Str state)
   where (_,stack,state) = run(compile (parse programCode), createEmptyStack, createEmptyState)
 
 -- Examples:
--- testParser "x := 5; x := x - 1;" == ("","x=4") -> funciona
--- testParser "if True then x := 1 else x := 2" == ("","x=1") -> funciona
+-- testParser "x := 5; x := x - 1;" == ("","x=4")
+-- testParser "x := 0 - 2;" == ("","x=-2")
 -- testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2")
--- testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1 else y := 2" == ("","y=2")
--- testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;)" == ("","x=1")
+-- testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;);" == ("","x=1")
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1;" == ("","x=2")
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4")
+-- testParser "x := 44; if x <= 43 then x := 1; else (x := 33; x := x+1;); y := x*2;" == ("","x=34,y=68")
+-- testParser "x := 42; if x <= 43 then (x := 33; x := x+1;) else x := 1;" == ("","x=34")
+-- testParser "if (1 == 0+1 = 2+1 == 3) then x := 1; else x := 2;" == ("","x=1")
+-- testParser "if (1 == 0+1 = (2+1 == 4)) then x := 1; else x := 2;" == ("","x=2")
 -- testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6")
 -- testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == ("","fact=3628800,i=1")
