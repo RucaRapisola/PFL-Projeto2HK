@@ -67,7 +67,8 @@ run (Sub:code, IntVal x:IntVal y:stack, state) = run (code, IntVal (x - y):stack
 run (Tru:code, stack, state) = run (code, BoolVal True:stack, state)
 run (Fals:code, stack, state) = run (code, BoolVal False:stack, state)
 run (Equ:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (x == y):stack, state)
-run (Le:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (x <= y):stack, state)
+run (Equ:code, BoolVal x:BoolVal y:stack, state) = run (code, BoolVal (x == y):stack, state)
+run (Le:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (y <= x):stack, state)
 run (And:code, BoolVal x:BoolVal y:stack, state) = run (code, BoolVal (x && y):stack, state)
 run (Neg:code, BoolVal x:stack, state) = run (code, BoolVal (not x):stack, state)
 run (Fetch var:code, stack, state) = run (code, (fetch var state):stack, state)
@@ -112,7 +113,7 @@ testAssembler code = (stack2Str stack, state2Str state)
 data Aexp = Num Integer | Var String | AddA Aexp Aexp | SubA Aexp Aexp | MultA Aexp Aexp deriving Show
 
 -- Bexp
-data Bexp = BTrue | BFalse | Eq Aexp Aexp | Leq Aexp Aexp | AndB Bexp Bexp | NotB Bexp deriving Show
+data Bexp = BTrue | BFalse | EqA Aexp Aexp | EqB Bexp Bexp | Leq Aexp Aexp | AndB Bexp Bexp | NotB Bexp deriving Show
 
 data Stm =  Aexp | Bexp | Assign String Aexp | Skip | If Bexp [Stm] [Stm] | While Bexp [Stm] deriving Show
 
@@ -130,7 +131,8 @@ compA (MultA a1 a2) = compA a1 ++ compA a2 ++ [Mult]
 compB :: Bexp -> Code
 compB BTrue = [Tru]
 compB BFalse = [Fals]
-compB (Eq a1 a2) = compA a1 ++ compA a2 ++ [Equ]
+compB (EqA a1 a2) = compA a1 ++ compA a2 ++ [Equ]
+compB (EqB b1 b2) = compB b1 ++ compB b2 ++ [Equ]
 compB (Leq a1 a2) = compA a1 ++ compA a2 ++ [Le]
 compB (AndB b1 b2) = compB b1 ++ compB b2 ++ [And]
 compB (NotB b) = compB b ++ [Neg]
@@ -140,7 +142,7 @@ compile :: Program -> Code
 compile [] = []
 compile (Assign var aexp : stms ) = compA aexp ++ [Store var]  ++ compile stms 
 compile (Skip : stms) = compile stms
-compile (If bexp stms1 stms2 : stms) = compB bexp ++ [Branch (compile stms2) (compile stms1)] ++ compile stms
+compile (If bexp stms1 stms2 : stms) = compB bexp ++ [Branch (compile stms1) (compile stms2)] ++ compile stms
 compile (While bexp stms1 : stms) = compB bexp ++ [Branch (compile stms1 ++ [Loop (compB bexp) (compile stms1)]) []] ++ compile stms
 
 
@@ -161,7 +163,7 @@ parseStms tokens = case tokens of
         in (Assign var exp : stms, restTokens)
       _ -> error "Invalid syntax assign"
   (TIf : ts ) ->
-    case parseEqOrLeqOrAndOrNot ts of
+    case parseLeqOrEqOrTrueOrFalseOrParOrAexp ts of
       Just (exp, TThen : TOpenPar : rest) -> 
         let (stms1, TClosePar : restTokens1) = parseStms rest
         in case restTokens1 of
@@ -184,7 +186,7 @@ parseStms tokens = case tokens of
           _ -> error "Invalid syntax else"
       _ -> error "Invalid syntax if"
   (TWhile : ts) ->
-    case parseEqOrLeqOrAndOrNot ts of
+    case parseLeqOrEqOrTrueOrFalseOrParOrAexp ts of
       Just (exp, TDo : rest) -> 
         let (stms1, restTokens1) = parseStms rest
         in (While exp stms1 : fst (parseStms restTokens1), snd (parseStms restTokens1))
@@ -197,7 +199,7 @@ parseStm (TVar var : TAssign : ts) =
     Just (exp, TSemiColon : rest) -> (Assign var exp, rest)
     _ -> error "Invalid syntax assign"
 parseStm (TIf : ts ) =
-  case parseEqOrLeqOrAndOrNot ts of
+  case parseLeqOrEqOrTrueOrFalseOrParOrAexp ts of
     Just (exp, TThen : rest) -> 
       let (stms1, restTokens1) = parseStms rest
       in case restTokens1 of
@@ -210,7 +212,7 @@ parseStm (TIf : ts ) =
         _ -> error "Invalid syntax else"
     _ -> error "Invalid syntax if"
 parseStm (TWhile : ts) =
-  case parseEqOrLeqOrAndOrNot ts of
+  case parseLeqOrEqOrTrueOrFalseOrParOrAexp ts of
     Just (exp, TDo : rest) -> 
       let (stms1, restTokens1) = parseStms rest
       in (While exp stms1, restTokens1)
@@ -261,39 +263,42 @@ orElse Nothing y = y
 
 -- Parser Bexp
 
-parseEqOrLeqOrAndOrNot :: [Token] -> Maybe (Bexp , [Token])
-parseEqOrLeqOrAndOrNot xs = case parseSubOrSumOrProdOrIntOrPar xs of
-  Just (exp1, TEqu : rest) -> case parseSubOrSumOrProdOrIntOrPar rest of
-    Just (exp2, rest2) -> Just (Eq exp1 exp2, rest2)
+parseLeqOrEqOrTrueOrFalseOrParOrAexp :: [Token] -> Maybe (Bexp , [Token])
+parseLeqOrEqOrTrueOrFalseOrParOrAexp (TOpenPar : xs) = case parseEqBoolOrAnd xs of
+  Just (stm, TClosePar : rest) -> Just (stm, rest)
+  _ -> Nothing
+parseLeqOrEqOrTrueOrFalseOrParOrAexp (TTrue : xs) = Just (BTrue, xs)
+parseLeqOrEqOrTrueOrFalseOrParOrAexp (TFalse : xs) = Just (BFalse, xs)
+parseLeqOrEqOrTrueOrFalseOrParOrAexp xs = case parseSubOrSumOrProdOrIntOrPar xs of
+  Just (stm, TEqu : rest) -> case parseSubOrSumOrProdOrIntOrPar rest of
+    Just (stm2, rest2) -> Just (EqA stm stm2, rest2)
     _ -> Nothing
-  _ -> parseLeqOrAndOrNot xs
-
-parseLeqOrAndOrNot :: [Token] -> Maybe (Bexp , [Token])
-parseLeqOrAndOrNot xs = case parseSubOrSumOrProdOrIntOrPar xs of
-  Just (exp1, TLe : rest) -> case parseSubOrSumOrProdOrIntOrPar rest of
-    Just (exp2, rest2) -> Just (Leq exp1 exp2, rest2)
+  Just (stm, TLe : rest) -> case parseSubOrSumOrProdOrIntOrPar rest of
+    Just (stm2, rest2) -> Just (Leq stm stm2, rest2)
     _ -> Nothing
-  _ -> parseAndOrNot xs
+  result -> Nothing
 
-parseAndOrNot :: [Token] -> Maybe (Bexp , [Token])
-parseAndOrNot xs = case parseNot xs of
-  Just (stm, TAnd : rest) -> case parseAndOrNot rest of
+parseEqBoolOrAnd :: [Token] -> Maybe (Bexp , [Token])
+parseEqBoolOrAnd xs = case parseEqBoolOrNot xs of
+  Just (stm, TAnd : rest) -> case parseEqBoolOrAnd rest of
     Just (stm2, rest2) -> Just (AndB stm stm2, rest2)
     _ -> Nothing
   result -> result
 
-parseNot :: [Token] -> Maybe (Bexp , [Token])
-parseNot (TNot : xs) = case parseNot xs of
-  Just (stm, rest) -> Just (NotB stm, rest)
-  _ -> Nothing
-parseNot xs = parseBool xs
+parseEqBoolOrNot :: [Token] -> Maybe (Bexp , [Token])
+parseEqBoolOrNot xs = case parseNotOrLeqOrEq xs of
+  Just (stm, TBoolEqu : rest) -> case parseEqBoolOrNot rest of
+    Just (stm2, rest2) -> Just (EqB stm stm2, rest2)
+    _ -> Nothing
+  result -> result
 
-parseBool :: [Token] -> Maybe (Bexp , [Token])
-parseBool (TTrue : xs) = Just (BTrue, xs)
-parseBool (TFalse : xs) = Just (BFalse, xs)
-parseBool xs = case parseEqOrLeqOrAndOrNot xs of
-  Just (stm, rest) -> Just (stm, rest)
-  _ -> Nothing
+parseNotOrLeqOrEq :: [Token] -> Maybe (Bexp , [Token])
+parseNotOrLeqOrEq xs = case parseLeqOrEqOrTrueOrFalseOrParOrAexp xs of
+  Just (stm, TNot : rest) -> Just (NotB stm, rest)
+  result -> result
+
+
+
 
 -- Lexer
 
@@ -308,6 +313,7 @@ data Token
     | TAnd
     | TLe
     | TDo
+    | TBoolEqu
     | TEqu
     | TPlus
     | TMinus
@@ -331,7 +337,7 @@ myLexer (x:xs)
     | x == '-' = TMinus : myLexer xs
     | x == '*' = TTimes : myLexer xs
     | x == '=' && take 1 xs == "=" = TEqu : myLexer (drop 1 xs)
-    | x == '=' = TEqu : myLexer xs 
+    | x == '=' = TBoolEqu : myLexer xs
     | x == '<' && take 1 xs == "=" = TLe : myLexer (drop 1 xs)
     | x == '!' = TNot : myLexer xs
     | x == ':' && take 1 xs == "=" = TAssign : myLexer (drop 1 xs)
@@ -361,7 +367,7 @@ testParser programCode = (stack2Str stack, state2Str state)
 -- Examples:
 -- testParser "x := 5; x := x - 1;" == ("","x=4") -> OK
 -- testParser "x := 0 - 2;" == ("","x=-2") -> OK
--- testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2") -> falta mexer com os parentesis na condicao
+-- testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2") 
 -- testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;);" == ("","x=1") -> OK
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1;" == ("","x=2")  -> OK
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4") ->  OK
