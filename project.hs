@@ -52,7 +52,9 @@ state2Str st = init $ concatMap (\(var, val) -> var ++ "=" ++ stackElementToStri
 
 -- Fetch and Store operations
 fetch :: String -> State -> StackElement
-fetch var state = maybe (error $ "Variable not found: " ++ var) id (lookup var state)
+fetch var state = case lookup var state of
+    Just val -> val
+    Nothing  -> error "Run-time error"
 
 store :: String -> StackElement -> State -> State
 store var val st = sortBy (comparing fst) $ (var, val) : filter ((var /=) . fst) st
@@ -69,7 +71,9 @@ run (Fals:code, stack, state) = run (code, BoolVal False:stack, state)
 run (Equ:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (x == y):stack, state)
 run (Equ:code, BoolVal x:BoolVal y:stack, state) = run (code, BoolVal (x == y):stack, state)
 run (Le:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (y <= x):stack, state)
-run (And:code, BoolVal x:BoolVal y:stack, state) = run (code, BoolVal (x && y):stack, state)
+run (And:code, x:y:stack, state) = case (x, y) of
+    (BoolVal xb, BoolVal yb) -> run (code, BoolVal (xb && yb):stack, state)
+    _ -> error "Run-time error"
 run (Neg:code, BoolVal x:stack, state) = run (code, BoolVal (not x):stack, state)
 run (Fetch var:code, stack, state) = run (code, (fetch var state):stack, state)
 run (Store var:code, val:stack, state) = run (code, stack, store var val state)
