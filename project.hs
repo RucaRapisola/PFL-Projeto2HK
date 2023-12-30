@@ -191,10 +191,10 @@ parseStms tokens = case tokens of
       _ -> error "Invalid syntax if"
   (TWhile : ts) ->
     case parseLeqOrEqOrTrueOrFalseOrParOrAexp ts of
-      Just (exp, TDo : rest) -> 
-        let (stms1, restTokens1) = parseStms rest
+      Just (exp, TDo : TOpenPar : rest) -> 
+        let (stms1, TClosePar : TSemiColon : restTokens1) = parseStms rest
         in (While exp stms1 : fst (parseStms restTokens1), snd (parseStms restTokens1))
-      _ -> error "Invalid syntax while"
+      _ -> error $ "Invalid syntax while" ++ show ts
   _ -> ([], tokens)
 
 parseStm :: [Token] -> (Stm, [Token])
@@ -297,9 +297,10 @@ parseEqBoolOrNot xs = case parseNotOrLeqOrEq xs of
   result -> result
 
 parseNotOrLeqOrEq :: [Token] -> Maybe (Bexp , [Token])
-parseNotOrLeqOrEq xs = case parseLeqOrEqOrTrueOrFalseOrParOrAexp xs of
-  Just (stm, TNot : rest) -> Just (NotB stm, rest)
-  result -> result
+parseNotOrLeqOrEq (TNot : xs) = case parseLeqOrEqOrTrueOrFalseOrParOrAexp xs of
+  Just (stm, rest) -> Just (NotB stm, rest)
+  _ -> Nothing
+parseNotOrLeqOrEq xs = parseLeqOrEqOrTrueOrFalseOrParOrAexp xs
 
 
 
@@ -345,17 +346,16 @@ myLexer (x:xs)
     | x == '<' && take 1 xs == "=" = TLe : myLexer (drop 1 xs)
     | x == '!' = TNot : myLexer xs
     | x == ':' && take 1 xs == "=" = TAssign : myLexer (drop 1 xs)
-    | x == 'i' && take 5 xs == "fnot " = TIf : TNot : myLexer (drop 5 xs)
     | x == 'i' && take 2 xs == "f " = TIf : myLexer (drop 2 xs)
     | x == 't' && take 4 xs == "hen " = TThen : myLexer (drop 4 xs)
     | x == 'e' && take 4 xs == "lse " = TElse : myLexer (drop 4 xs)
     | x == 't' && take 4 xs == "rue " = TTrue : myLexer (drop 4 xs)
     | x == 'f' && take 5 xs == "alse " = TFalse : myLexer (drop 5 xs)
     | x == 'w' && take 5 xs == "hile " = TWhile : myLexer (drop 5 xs)
-    | x == 'd' && take 2 xs == "o" = TDo : myLexer (drop 2 xs)
-    | x == 'n' && take 3 xs == "ot " = TNot : myLexer (drop 3 xs)
-    | x == 'T' && take 4 xs == "rue " = TTrue : TSemiColon : myLexer (drop 4 xs)
-    | x == 'F' && take 5 xs == "alse " = TFalse : TSemiColon : myLexer (drop 5 xs)
+    | x == 'd' && take 1 xs == "o" = TDo : myLexer (drop 1 xs)
+    | x == 'n' && take 2 xs == "ot" = TNot : myLexer (drop 2 xs)
+    | x == 'T' && take 4 xs == "rue " = TTrue : myLexer (drop 4 xs)
+    | x == 'F' && take 5 xs == "alse " = TFalse : myLexer (drop 5 xs)
     | x == 'a' && take 3 xs == "nd " = TAnd : myLexer (drop 3 xs)
     | isDigit x = TNum (read (x : takeWhile isDigit xs)) : myLexer (dropWhile isDigit xs)
     | isAlpha x = TVar (x : takeWhile isAlpha xs) : myLexer (dropWhile isAlpha xs)
@@ -371,13 +371,13 @@ testParser programCode = (stack2Str stack, state2Str state)
 -- Examples:
 -- testParser "x := 5; x := x - 1;" == ("","x=4") -> OK
 -- testParser "x := 0 - 2;" == ("","x=-2") -> OK
--- testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2") 
+-- testParser "if (not True and 2 <= 5 = 3 == 4) then x := 1; else y := 2;" == ("","y=2") -> OK
 -- testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;);" == ("","x=1") -> OK
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1;" == ("","x=2")  -> OK
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4") ->  OK
 -- testParser "x := 44; if x <= 43 then x := 1; else (x := 33; x := x+1;); y := x*2;" == ("","x=34,y=68") -> OK
 -- testParser "x := 42; if x <= 43 then (x := 33; x := x+1;) else x := 1;" == ("","x=34") -> OK
--- testParser "if (1 == 0+1 = 2+1 == 3) then x := 1; else x := 2;" == ("","x=1")
--- testParser "if (1 == 0+1 = (2+1 == 4)) then x := 1; else x := 2;" == ("","x=2")
+-- testParser "if (1 == 0+1 = 2+1 == 3) then x := 1; else x := 2;" == ("","x=1") -> OK
+-- testParser "if (1 == 0+1 = (2+1 == 4)) then x := 1; else x := 2;" == ("","x=2") -> OK
 -- testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6") -> OK
--- testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == ("","fact=3628800,i=1")
+-- testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == ("","fact=3628800,i=1") -> OK
