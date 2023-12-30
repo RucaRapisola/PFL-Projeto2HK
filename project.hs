@@ -20,23 +20,19 @@ data Inst =
   deriving Show
 type Code = [Inst]
 
--- Stack and State types
-type Stack = [Integer]  -- We will use -1 to represent False and -2 for True on the Stack
-type State = [(String, Integer)]
+-- StackElement data type
+data StackElement = IntVal Integer | BoolVal Bool deriving Show
 
--- Helper functions for boolean values
-boolToInt :: Bool -> Integer
-boolToInt True = -2
-boolToInt False = -1
+-- Modified Stack type
+type Stack = [StackElement]
 
-intToBool :: Integer -> Bool
-intToBool n = n == -2
+-- State type remains the same
+type State = [(String, StackElement)]
 
-boolToString :: Integer -> String
-boolToString n = case n of
-                    -1 -> "False"
-                    -2 -> "True"
-                    _  -> show n
+-- Helper functions for stack elements
+stackElementToString :: StackElement -> String
+stackElementToString (IntVal n) = show n
+stackElementToString (BoolVal b) = show b
 
 -- Create empty stack and state
 createEmptyStack :: Stack
@@ -47,50 +43,48 @@ createEmptyState = []
 
 -- Convert stack to string (for testing purposes)
 stack2Str :: Stack -> String
-stack2Str stack = intercalate "," $ map boolToString stack
+stack2Str stack = intercalate "," $ map stackElementToString stack
 
 -- Convert state to string (for testing purposes)
 state2Str :: State -> String
 state2Str [] = ""
-state2Str st = init $ concatMap (\(var, val) -> var ++ "=" ++ boolToString val ++ ",") st
+state2Str st = init $ concatMap (\(var, val) -> var ++ "=" ++ stackElementToString val ++ ",") st
 
 -- Fetch and Store operations
-fetch :: String -> State -> Integer
+fetch :: String -> State -> StackElement
 fetch var state = maybe (error $ "Variable not found: " ++ var) id (lookup var state)
 
-store :: String -> Integer -> State -> State
+store :: String -> StackElement -> State -> State
 store var val st = sortBy (comparing fst) $ (var, val) : filter ((var /=) . fst) st
 
 -- The 'run' function
 run :: (Code, Stack, State) -> (Code, Stack, State)
 run ([], stack, state) = ([], stack, state)
-run ((Push n):code, stack, state) = run (code, n:stack, state)
-run (Add:code, x:y:stack, state) = run (code, (x + y):stack, state)
-run (Mult:code, x:y:stack, state) = run (code, (x * y):stack, state)
-run (Sub:code, x:y:stack, state) = run (code, (x - y):stack, state)
-run (Tru:code, stack, state) = run (code, boolToInt True:stack, state)
-run (Fals:code, stack, state) = run (code, boolToInt False:stack, state)
-run (Equ:code, x:y:stack, state) = run (code, boolToInt (x == y):stack, state)
-run (Le:code, y:x:stack, state) = run (code, boolToInt (y <= x):stack, state)
-run (And:code, x:y:stack, state) = run (code, boolToInt (intToBool x && intToBool y):stack, state)
-run (Neg:code, x:stack, state) = run (code, boolToInt (not $ intToBool x):stack, state)
-run (Fetch var:code, stack, state) = run (code, fetch var state:stack, state)
-run (Store var:code, x:stack, state) = run (code, stack, store var x state)
+run ((Push n):code, stack, state) = run (code, IntVal n:stack, state)
+run (Add:code, IntVal x:IntVal y:stack, state) = run (code, IntVal (x + y):stack, state)
+run (Mult:code, IntVal x:IntVal y:stack, state) = run (code, IntVal (x * y):stack, state)
+run (Sub:code, IntVal x:IntVal y:stack, state) = run (code, IntVal (x - y):stack, state)
+run (Tru:code, stack, state) = run (code, BoolVal True:stack, state)
+run (Fals:code, stack, state) = run (code, BoolVal False:stack, state)
+run (Equ:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (x == y):stack, state)
+run (Le:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (x <= y):stack, state)
+run (And:code, BoolVal x:BoolVal y:stack, state) = run (code, BoolVal (x && y):stack, state)
+run (Neg:code, BoolVal x:stack, state) = run (code, BoolVal (not x):stack, state)
+run (Fetch var:code, stack, state) = run (code, (fetch var state):stack, state)
+run (Store var:code, val:stack, state) = run (code, stack, store var val state)
 run (Noop:code, stack, state) = run (code, stack, state)
-run ((Branch trueBranch falseBranch):code, x:stack, state) =
-  if intToBool x
+run ((Branch trueBranch falseBranch):code, BoolVal x:stack, state) =
+  if x
   then run (trueBranch ++ code, stack, state)
   else run (falseBranch ++ code, stack, state)
-run ((Loop condition loopcode):code, stack, state) = run ( condition ++ [Branch (loopcode ++ [Loop condition loopcode]) code] ++ code, stack, state)
+run ((Loop condition loopcode):code, stack, state) = run (condition ++ [Branch (loopcode ++ [Loop condition loopcode]) code] ++ code, stack, state)
 
+run (inst:_, _, _) = error ("Unrecognized instruction or invalid types: " ++ show inst)
 
-run (inst:_, _, _) = error ("Unrecognized instruction: " ++ show inst)
-
-
--- Assembler test function
+-- Assembler test function remains the same
 testAssembler :: Code -> (String, String)
 testAssembler code = (stack2Str stack, state2Str state)
-  where (_, stack, state) = run (code, createEmptyStack, createEmptyState)
+  where (_,stack,state) = run(code, createEmptyStack, createEmptyState)
 
 -- Examples:
 -- testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10","")
@@ -102,6 +96,13 @@ testAssembler code = (stack2Str stack, state2Str state)
 -- testAssembler [Push (-20),Push (-21), Le] == ("True","")
 -- testAssembler [Push 5,Store "x",Push 1,Fetch "x",Sub,Store "x"] == ("","x=4")
 -- testAssembler [Push 10,Store "i",Push 1,Store "fact",Loop [Push 1,Fetch "i",Equ,Neg] [Fetch "i",Fetch "fact",Mult,Store "fact",Push 1,Fetch "i",Sub,Store "i"]] == ("","fact=3628800,i=1")
+-- If you test:
+-- testAssembler [Push 1,Push 2,And]
+-- You should get an exception with the string: "Run-time error"
+-- If you test:
+-- testAssembler [Tru,Tru,Store "y", Fetch "x",Tru]
+-- You should get an exception with the string: "Run-time error"
+
 
 -- Part 2
 
