@@ -162,15 +162,25 @@ parseStms tokens = case tokens of
       _ -> error "Invalid syntax assign"
   (TIf : ts ) ->
     case parseEqOrLeqOrAndOrNot ts of
-      Just (exp, TThen : rest) -> 
-        let (stms1, restTokens1) = parseStms rest
+      Just (exp, TThen : TOpenPar : rest) -> 
+        let (stms1, TClosePar : restTokens1) = parseStms rest
         in case restTokens1 of
           (TElse : TOpenPar : rest2) -> 
-            let (stms2, TClosePar : restTokens2) = parseStms rest2
+            let (stms2, TClosePar : TSemiColon : restTokens2) = parseStms rest2
             in (If exp stms1 stms2 : fst (parseStms restTokens2), snd (parseStms restTokens2))
           (TElse : rest2) -> 
             let (stm2, restTokens2) = parseStm rest2
             in (If exp stms1 [stm2] : fst (parseStms restTokens2), snd (parseStms restTokens2))
+          _ -> error "Invalid syntax else"
+      Just (exp, TThen : rest) -> 
+        let (stm1, restTokens1) = parseStm rest
+        in case restTokens1 of
+          (TElse : TOpenPar : rest2) -> 
+            let (stms2, TClosePar : TSemiColon : restTokens2) = parseStms rest2
+            in (If exp [stm1] stms2 : fst (parseStms restTokens2), snd (parseStms restTokens2))
+          (TElse : rest2) -> 
+            let (stm2, restTokens2) = parseStm rest2
+            in (If exp [stm1] [stm2] : fst (parseStms restTokens2), snd (parseStms restTokens2))
           _ -> error "Invalid syntax else"
       _ -> error "Invalid syntax if"
   (TWhile : ts) ->
@@ -208,6 +218,7 @@ parseStm (TWhile : ts) =
 parseStm _ = error "Invalid syntax stm"
 
 
+-- Parser Aexp
 
 parseInt :: [Token] -> Maybe (Aexp , [Token])
 parseInt (TNum n : xs) = Just (Num n, xs)
@@ -247,6 +258,8 @@ parseIntOrPar xs = parseInt xs `orElse` parseVar xs
 orElse :: Maybe a -> Maybe a -> Maybe a
 orElse (Just x) _ = Just x
 orElse Nothing y = y
+
+-- Parser Bexp
 
 parseEqOrLeqOrAndOrNot :: [Token] -> Maybe (Bexp , [Token])
 parseEqOrLeqOrAndOrNot xs = case parseSubOrSumOrProdOrIntOrPar xs of
@@ -318,6 +331,7 @@ myLexer (x:xs)
     | x == '-' = TMinus : myLexer xs
     | x == '*' = TTimes : myLexer xs
     | x == '=' && take 1 xs == "=" = TEqu : myLexer (drop 1 xs)
+    | x == '=' = TEqu : myLexer xs 
     | x == '<' && take 1 xs == "=" = TLe : myLexer (drop 1 xs)
     | x == '!' = TNot : myLexer xs
     | x == ':' && take 1 xs == "=" = TAssign : myLexer (drop 1 xs)
@@ -348,11 +362,11 @@ testParser programCode = (stack2Str stack, state2Str state)
 -- testParser "x := 5; x := x - 1;" == ("","x=4") -> OK
 -- testParser "x := 0 - 2;" == ("","x=-2") -> OK
 -- testParser "if (not True and 2 <= 5 = 3 == 4) then x :=1; else y := 2;" == ("","y=2") -> falta mexer com os parentesis na condicao
--- testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;);" == ("","x=1") -> Funciona se tirares o ; do else
+-- testParser "x := 42; if x <= 43 then x := 1; else (x := 33; x := x+1;);" == ("","x=1") -> OK
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1;" == ("","x=2")  -> OK
 -- testParser "x := 42; if x <= 43 then x := 1; else x := 33; x := x+1; z := x+x;" == ("","x=2,z=4") ->  OK
--- testParser "x := 44; if x <= 43 then x := 1; else (x := 33; x := x+1;); y := x*2;" == ("","x=34,y=68") -> Funciona se tirares o ; do else
--- testParser "x := 42; if x <= 43 then (x := 33; x := x+1;) else x := 1;" == ("","x=34")
+-- testParser "x := 44; if x <= 43 then x := 1; else (x := 33; x := x+1;); y := x*2;" == ("","x=34,y=68") -> OK
+-- testParser "x := 42; if x <= 43 then (x := 33; x := x+1;) else x := 1;" == ("","x=34") -> OK
 -- testParser "if (1 == 0+1 = 2+1 == 3) then x := 1; else x := 2;" == ("","x=1")
 -- testParser "if (1 == 0+1 = (2+1 == 4)) then x := 1; else x := 2;" == ("","x=2")
 -- testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6") -> OK
