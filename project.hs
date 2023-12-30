@@ -381,3 +381,18 @@ testParser programCode = (stack2Str stack, state2Str state)
 -- testParser "if (1 == 0+1 = (2+1 == 4)) then x := 1; else x := 2;" == ("","x=2") -> OK
 -- testParser "x := 2; y := (x - 3)*(4 + 2*3); z := x +x*(2);" == ("","x=2,y=-10,z=6") -> OK
 -- testParser "i := 10; fact := 1; while (not(i == 1)) do (fact := fact * i; i := i - 1;);" == ("","fact=3628800,i=1") -> OK
+-- testParser "x := 5; y := x * 2;" == ("","x=5,y=10") -> OK
+-- testParser "x := 1; y := 2; z := 3; w := x + y + z;" == ("","x=1,y=2,z=3,w=6") -> OK
+-- testParser "x := 5; if (x == 5) then y := 1; else y := 2;" == ("","x=5,y=1") -> OK
+-- testParser "x := 10; while (not(x == 0)) do (x := x - 1; y := x * 2;);" == ("","x=0,y=0") -> OK
+-- testParser "x := 10; while (not(x == 0)) do (x := x - 1; y := x * 2; if (y == 0) then z := 1; else z := 0;);" == ("","x=0,y=0,z=1") -> OK
+-- testParser "x := 5; y := z * 2;" -- Error: 'z' is not defined
+-- testParser "x := 1; y := 2; z := 3; w := x + y + z; v := w * 2; u := v / 2; if (u == w) then t := 1; else t := 0; if (v == u) then s := 1;" -- Error: 'else' clause missing for 'if' statement
+-- testParser "x := 5; y := x * 2; z := y + 3; w := z / 2; if (w == 6.5) then v := 1; else v := 0; u := v / 2;" -- Error: '/' operator not supported
+-- testParser "x := 1; y := 2; z := 3; if (x == 1) then (w := x + y + z; v := w * 2; if (v == 12) then u := 1; else u := 0;) else (t := v / 2;);" -- Error: '/' operator not supported
+-- testParser "x := 10; while (not(x == 0)) do (x := x - 1; y := x * 2; if (y == 0) then z := 1; else z := 0;); a := b;" -- Error: 'b' is not defined
+-- testParser "x := 10; while (not(x == 0)) do (x := x - 1; y := x * 2; if (y == 0) then z := 1; else z := 0;); a := b / 2;" -- Error: 'b' is not defined and '/' operator not supported
+-- testParser "x := 10; while (not(x == 0)) do (x := x - 1; y := x * 2; if (y == 0) then z := 1; else z := 0;); a := b * 2;" -- Error: 'b' is not defined
+-- testParser "x := 10; while (not(x == 0)) do (x := x - 1; y := x * 2; if (y == 0) then z := 1; else z := 0;); a := b + 2;" -- Error: 'b' is not defined
+-- testParser "x := 10; while (not(x == 0)) do (x := x - 1; y := x * 2; if (y == 0) then z := 1; else z := 0;); a := b - 2;" -- Error: 'b' is not defined
+
