@@ -344,19 +344,16 @@ myLexer (x:xs)
     | x == '=' && take 1 xs == "=" = TEqu : myLexer (drop 1 xs)
     | x == '=' = TBoolEqu : myLexer xs
     | x == '<' && take 1 xs == "=" = TLe : myLexer (drop 1 xs)
-    | x == '!' = TNot : myLexer xs
     | x == ':' && take 1 xs == "=" = TAssign : myLexer (drop 1 xs)
-    | x == 'i' && take 2 xs == "f " = TIf : myLexer (drop 2 xs)
-    | x == 't' && take 4 xs == "hen " = TThen : myLexer (drop 4 xs)
-    | x == 'e' && take 4 xs == "lse " = TElse : myLexer (drop 4 xs)
-    | x == 't' && take 4 xs == "rue " = TTrue : myLexer (drop 4 xs)
-    | x == 'f' && take 5 xs == "alse " = TFalse : myLexer (drop 5 xs)
-    | x == 'w' && take 5 xs == "hile " = TWhile : myLexer (drop 5 xs)
+    | x == 'i' && take 1 xs == "f" = TIf : myLexer (drop 1 xs)
+    | x == 't' && take 3 xs == "hen" = TThen : myLexer (drop 3 xs)
+    | x == 'e' && take 3 xs == "lse" = TElse : myLexer (drop 3 xs)
+    | x == 'w' && take 4 xs == "hile" = TWhile : myLexer (drop 4 xs)
     | x == 'd' && take 1 xs == "o" = TDo : myLexer (drop 1 xs)
     | x == 'n' && take 2 xs == "ot" = TNot : myLexer (drop 2 xs)
-    | x == 'T' && take 4 xs == "rue " = TTrue : myLexer (drop 4 xs)
-    | x == 'F' && take 5 xs == "alse " = TFalse : myLexer (drop 5 xs)
-    | x == 'a' && take 3 xs == "nd " = TAnd : myLexer (drop 3 xs)
+    | x == 'T' && take 3 xs == "rue" = TTrue : myLexer (drop 3 xs)
+    | x == 'F' && take 4 xs == "alse" = TFalse : myLexer (drop 4 xs)
+    | x == 'a' && take 2 xs == "nd" = TAnd : myLexer (drop 2 xs)
     | isDigit x = TNum (read (x : takeWhile isDigit xs)) : myLexer (dropWhile isDigit xs)
     | isAlpha x = TVar (x : takeWhile isAlpha xs) : myLexer (dropWhile isAlpha xs)
     | otherwise = error ("Unrecognized token: " ++ [x])
@@ -395,4 +392,5 @@ testParser programCode = (stack2Str stack, state2Str state)
 -- testParser "x := 10; while (not(x == 0)) do (x := x - 1; y := x * 2; if (y == 0) then z := 1; else z := 0;); a := b * 2;" -- Error: 'b' is not defined
 -- testParser "x := 10; while (not(x == 0)) do (x := x - 1; y := x * 2; if (y == 0) then z := 1; else z := 0;); a := b + 2;" -- Error: 'b' is not defined
 -- testParser "x := 10; while (not(x == 0)) do (x := x - 1; y := x * 2; if (y == 0) then z := 1; else z := 0;); a := b - 2;" -- Error: 'b' is not defined
+-- testParser "if (not(not True)) then x := 1; else y := 2;" == ("","x=1") -> OK
 
