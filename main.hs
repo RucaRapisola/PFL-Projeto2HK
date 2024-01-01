@@ -141,6 +141,7 @@ data Stm =  Aexp | Bexp | Assign String Aexp | Skip | If Bexp [Stm] [Stm] | Whil
 -- Definition of Program
 type Program = [Stm]
 
+-- Function to compile an Aexp to Code
 compA :: Aexp -> Code
 compA (Num n) = [Push n]
 compA (Var var) = [Fetch var]
@@ -149,6 +150,7 @@ compA (SubA a1 a2) = compA a2 ++ compA a1 ++ [Sub]
 compA (MultA a1 a2) = compA a1 ++ compA a2 ++ [Mult]
 
 
+-- Function to compile a Bexp to Code
 compB :: Bexp -> Code
 compB BTrue = [Tru]
 compB BFalse = [Fals]
@@ -159,6 +161,7 @@ compB (AndB b1 b2) = compB b1 ++ compB b2 ++ [And]
 compB (NotB b) = compB b ++ [Neg]
 
 
+-- Function to compile a Program to Code, using the functions compA and compB
 compile :: Program -> Code
 compile [] = []
 compile (Assign var aexp : stms ) = compA aexp ++ [Store var]  ++ compile stms 
@@ -167,6 +170,7 @@ compile (If bexp stms1 stms2 : stms) = compB bexp ++ [Branch (compile stms1) (co
 compile (While bexp stms1 : stms) = compB bexp ++ [Branch (compile stms1 ++ [Loop (compB bexp) (compile stms1)]) []] ++ compile stms
 
 
+-- Function to parse a string to a Program, after tokenizing it
 parse :: String -> Program
 parse str = case parseStms (myLexer str) of
   (stms, []) -> stms
@@ -174,6 +178,7 @@ parse str = case parseStms (myLexer str) of
 
 -- Parser
 
+-- function to parse a list of statements into a Program and the remaining tokens
 parseStms :: [Token] -> (Program, [Token])
 parseStms [] = ([], [])
 parseStms tokens = case tokens of
@@ -214,6 +219,7 @@ parseStms tokens = case tokens of
       _ -> error $ "Invalid syntax while" ++ show ts
   _ -> ([], tokens)
 
+-- function to parse a statement into a Stm and the remaining tokens
 parseStm :: [Token] -> (Stm, [Token])
 parseStm (TVar var : TAssign : ts) =
   case parseSubOrSumOrProdOrIntOrPar ts of
@@ -243,10 +249,13 @@ parseStm _ = error "Invalid syntax stm"
 
 -- Parser Aexp
 
+-- function to parse a list of tokens into a Num and the remaining tokens.
 parseInt :: [Token] -> Maybe (Aexp , [Token])
 parseInt (TNum n : xs) = Just (Num n, xs)
 parseInt _ = Nothing
 
+-- function to parse a list of tokens into an Aexp and the remaining tokens. It parses the following grammar, following the precedence rules:
+-- Aexp ::= Aexp + Aexp | Aexp - Aexp | Aexp * Aexp | (Aexp) | Var | Int
 parseSubOrSumOrProdOrIntOrPar :: [Token] -> Maybe (Aexp , [Token])
 parseSubOrSumOrProdOrIntOrPar xs = case parseSumOrProdOrIntOrPar xs of
   Just (stm, TMinus : rest) -> case parseSubOrSumOrProdOrIntOrPar rest of
@@ -254,6 +263,8 @@ parseSubOrSumOrProdOrIntOrPar xs = case parseSumOrProdOrIntOrPar xs of
     _ -> Nothing
   result -> result
 
+-- function to parse a list of tokens into an Aexp and the remaining tokens. It parses the following grammar, following the precedence rules:
+-- Aexp ::= Aexp + Aexp | Aexp * Aexp | (Aexp) | Var | Int
 parseSumOrProdOrIntOrPar :: [Token] -> Maybe (Aexp , [Token])
 parseSumOrProdOrIntOrPar xs = case parseProdOrIntOrPar xs of
   Just (stm, TPlus : rest) -> case parseSumOrProdOrIntOrPar rest of
@@ -261,6 +272,8 @@ parseSumOrProdOrIntOrPar xs = case parseProdOrIntOrPar xs of
     _ -> Nothing
   result -> result
 
+-- function to parse a list of tokens into an Aexp and the remaining tokens. It parses the following grammar, following the precedence rules:
+-- Aexp ::= Aexp * Aexp | (Aexp) | Var | Int
 parseProdOrIntOrPar :: [Token] -> Maybe (Aexp , [Token])
 parseProdOrIntOrPar xs = case parseIntOrPar xs of
   Just (stm, TTimes : rest) -> case parseProdOrIntOrPar rest of
@@ -268,22 +281,28 @@ parseProdOrIntOrPar xs = case parseIntOrPar xs of
     _ -> Nothing
   result -> result
 
+-- function to parse a list of tokens into a Var and the remaining tokens.
 parseVar :: [Token] -> Maybe (Aexp , [Token])
 parseVar (TVar v : xs) = Just (Var v, xs)
 parseVar _ = Nothing
 
+-- function to parse a list of tokens into an Aexp and the remaining tokens. It parses the following grammar, following the precedence rules:
+-- Aexp ::= (Aexp) | Var | Int
 parseIntOrPar :: [Token] -> Maybe (Aexp , [Token])
 parseIntOrPar (TOpenPar : xs) = case parseSubOrSumOrProdOrIntOrPar xs of
   Just (stm, TClosePar : rest) -> Just (stm, rest)
   _ -> Nothing
 parseIntOrPar xs = parseInt xs `orElse` parseVar xs
 
+-- function to define an orElse operator for Maybe
 orElse :: Maybe a -> Maybe a -> Maybe a
 orElse (Just x) _ = Just x
 orElse Nothing y = y
 
 -- Parser Bexp
 
+-- function to parse a list of tokens into a Bexp and the remaining tokens. It parses the following grammar, following the precedence rules:
+-- Bexp ::= Bexp = Bexp | Bexp <= Bexp | Bexp and Bexp | not Bexp | true | false | (Bexp) | Aexp
 parseLeqOrEqOrTrueOrFalseOrParOrAexp :: [Token] -> Maybe (Bexp , [Token])
 parseLeqOrEqOrTrueOrFalseOrParOrAexp (TOpenPar : xs) = case parseEqBoolOrAnd xs of
   Just (stm, TClosePar : rest) -> Just (stm, rest)
@@ -306,6 +325,8 @@ parseEqBoolOrAnd xs = case parseEqBoolOrNot xs of
     _ -> Nothing
   result -> result
 
+-- function to parse a list of tokens into a Bexp and the remaining tokens. It parses the following grammar, following the precedence rules:
+-- Bexp ::= Bexp = Bexp | Bexp and Bexp | not Bexp | true | false | (Bexp) | Aexp
 parseEqBoolOrNot :: [Token] -> Maybe (Bexp , [Token])
 parseEqBoolOrNot xs = case parseNotOrLeqOrEq xs of
   Just (stm, TBoolEqu : rest) -> case parseEqBoolOrNot rest of
@@ -313,6 +334,8 @@ parseEqBoolOrNot xs = case parseNotOrLeqOrEq xs of
     _ -> Nothing
   result -> result
 
+-- function to parse a list of tokens into a Bexp and the remaining tokens. It parses the following grammar, following the precedence rules:
+-- Bexp ::= Bexp and Bexp | not Bexp | true | false | (Bexp) | Aexp
 parseNotOrLeqOrEq :: [Token] -> Maybe (Bexp , [Token])
 parseNotOrLeqOrEq (TNot : xs) = case parseLeqOrEqOrTrueOrFalseOrParOrAexp xs of
   Just (stm, rest) -> Just (NotB stm, rest)
@@ -324,6 +347,7 @@ parseNotOrLeqOrEq xs = parseLeqOrEqOrTrueOrFalseOrParOrAexp xs
 
 -- Lexer
 
+-- Definition of Token
 data Token 
     = TAssign
     | TIf
@@ -348,6 +372,7 @@ data Token
     | TNum Integer
     deriving (Show, Eq)
 
+-- Function to tokenize a string
 myLexer :: String -> [Token]
 myLexer [] = []
 myLexer (x:xs) 
