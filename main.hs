@@ -14,79 +14,96 @@ import qualified Text.Parsec.Token as Token
 import Debug.Trace
 
 -- Definition of Inst and Code
+-- Definition of the Instruction Set
 data Inst =
-  Push Integer | Add | Mult | Sub | Tru | Fals | Equ | Le | And | Neg | Fetch String | Store String | Noop |
-  Branch Code Code | Loop Code Code
+  Push Integer | -- Pushes an integer onto the stack
+  Add | -- Adds the top two integers on the stack
+  Mult | -- Multiplies the top two integers on the stack
+  Sub | -- Subtracts the top integer from the second top integer
+  Tru | -- Pushes True (Boolean) onto the stack
+  Fals | -- Pushes False (Boolean) onto the stack
+  Equ | -- Checks if the top two stack elements are equal
+  Le | -- Checks if the second top element is less than or equal to the top element
+  And | -- Performs logical AND on the top two Boolean elements
+  Neg | -- Negates the top Boolean element
+  Fetch String | -- Fetches the value of a variable from the state
+  Store String | -- Stores the top stack element into a variable in the state
+  Noop | -- No operation
+  Branch Code Code | -- Executes one of two code branches based on the top stack condition
+  Loop Code Code -- Loops over code based on a condition
   deriving Show
 type Code = [Inst]
 
--- StackElement data type
-data StackElement = IntVal Integer | BoolVal Bool deriving Show
+-- Definition of Stack Elements
+data StackElement = IntVal Integer | BoolVal Bool deriving Show -- Stack elements can be either Integer or Boolean
 
--- Modified Stack type
-type Stack = [StackElement]
+-- Definition of the Stack
+type Stack = [StackElement] -- Stack is a list of StackElements
 
--- State type remains the same
-type State = [(String, StackElement)]
+-- Definition of the State
+type State = [(String, StackElement)] -- State maps variable names to StackElements
 
--- Helper functions for stack elements
+-- Helper function to convert StackElement to String
 stackElementToString :: StackElement -> String
-stackElementToString (IntVal n) = show n
-stackElementToString (BoolVal b) = show b
+stackElementToString (IntVal n) = show n -- Convert integer value to string
+stackElementToString (BoolVal b) = show b -- Convert boolean value to string
 
--- Create empty stack and state
+-- Function to create an empty stack
 createEmptyStack :: Stack
 createEmptyStack = []
 
+-- Function to create an empty state
 createEmptyState :: State
 createEmptyState = []
 
--- Convert stack to string (for testing purposes)
+-- Function to convert a stack to a string representation
 stack2Str :: Stack -> String
 stack2Str stack = intercalate "," $ map stackElementToString stack
 
--- Convert state to string (for testing purposes)
+-- Function to convert a state to a string representation
 state2Str :: State -> String
 state2Str [] = ""
 state2Str st = init $ concatMap (\(var, val) -> var ++ "=" ++ stackElementToString val ++ ",") st
 
--- Fetch and Store operations
+-- Fetch operation: Retrieves the value of a variable from the state
 fetch :: String -> State -> StackElement
 fetch var state = case lookup var state of
     Just val -> val
-    Nothing  -> error "Run-time error"
+    Nothing  -> error "Run-time error"  -- Error if variable not found
 
+-- Store operation: Stores a value in the state
 store :: String -> StackElement -> State -> State
 store var val st = sortBy (comparing fst) $ (var, val) : filter ((var /=) . fst) st
 
--- The 'run' function
+-- The 'run' function: Executes the instructions
 run :: (Code, Stack, State) -> (Code, Stack, State)
-run ([], stack, state) = ([], stack, state)
-run ((Push n):code, stack, state) = run (code, IntVal n:stack, state)
-run (Add:code, IntVal x:IntVal y:stack, state) = run (code, IntVal (x + y):stack, state)
-run (Mult:code, IntVal x:IntVal y:stack, state) = run (code, IntVal (x * y):stack, state)
-run (Sub:code, IntVal x:IntVal y:stack, state) = run (code, IntVal (x - y):stack, state)
-run (Tru:code, stack, state) = run (code, BoolVal True:stack, state)
-run (Fals:code, stack, state) = run (code, BoolVal False:stack, state)
-run (Equ:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (x == y):stack, state)
-run (Equ:code, BoolVal x:BoolVal y:stack, state) = run (code, BoolVal (x == y):stack, state)
-run (Le:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (y <= x):stack, state)
-run (And:code, x:y:stack, state) = case (x, y) of
+-- Below are the cases handling different instructions
+run ([], stack, state) = ([], stack, state) -- Base case: no code to run
+run ((Push n):code, stack, state) = run (code, IntVal n:stack, state) -- Push operation
+run (Add:code, IntVal x:IntVal y:stack, state) = run (code, IntVal (x + y):stack, state) -- Add operation
+run (Mult:code, IntVal x:IntVal y:stack, state) = run (code, IntVal (x * y):stack, state) -- Mult operation
+run (Sub:code, IntVal x:IntVal y:stack, state) = run (code, IntVal (x - y):stack, state) -- Sub operation
+run (Tru:code, stack, state) = run (code, BoolVal True:stack, state) -- Tru operation
+run (Fals:code, stack, state) = run (code, BoolVal False:stack, state) -- Fals operation
+run (Equ:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (x == y):stack, state) -- Equ operation for integers
+run (Equ:code, BoolVal x:BoolVal y:stack, state) = run (code, BoolVal (x == y):stack, state) -- Equ operation for booleans
+run (Le:code, IntVal x:IntVal y:stack, state) = run (code, BoolVal (y <= x):stack, state) -- Le operation
+run (And:code, x:y:stack, state) = case (x, y) of -- And operation
     (BoolVal xb, BoolVal yb) -> run (code, BoolVal (xb && yb):stack, state)
-    _ -> error "Run-time error"
-run (Neg:code, BoolVal x:stack, state) = run (code, BoolVal (not x):stack, state)
-run (Fetch var:code, stack, state) = run (code, (fetch var state):stack, state)
-run (Store var:code, val:stack, state) = run (code, stack, store var val state)
-run (Noop:code, stack, state) = run (code, stack, state)
-run ((Branch trueBranch falseBranch):code, BoolVal x:stack, state) =
+    _ -> error "Run-time error" -- Error if at least one values not boolean
+run (Neg:code, BoolVal x:stack, state) = run (code, BoolVal (not x):stack, state) -- Neg operation
+run (Fetch var:code, stack, state) = run (code, (fetch var state):stack, state) -- Fetch operation
+run (Store var:code, val:stack, state) = run (code, stack, store var val state) -- Store operation
+run (Noop:code, stack, state) = run (code, stack, state) -- Noop operation
+run ((Branch trueBranch falseBranch):code, BoolVal x:stack, state) = -- Branch operation
   if x
   then run (trueBranch ++ code, stack, state)
   else run (falseBranch ++ code, stack, state)
-run ((Loop condition loopcode):code, stack, state) = run (condition ++ [Branch (loopcode ++ [Loop condition loopcode]) code] ++ code, stack, state)
+run ((Loop condition loopcode):code, stack, state) = run (condition ++ [Branch (loopcode ++ [Loop condition loopcode]) code] ++ code, stack, state) -- Loop operation
 
-run (inst:_, _, _) = error ("Unrecognized instruction or invalid types: " ++ show inst)
+run (inst:_, _, _) = error ("Unrecognized instruction or invalid types: " ++ show inst) -- Error for unrecognized instruction
 
--- Assembler test function remains the same
+-- Assembler test function: Tests a piece of code and returns the final stack and state
 testAssembler :: Code -> (String, String)
 testAssembler code = (stack2Str stack, state2Str state)
   where (_,stack,state) = run(code, createEmptyStack, createEmptyState)
