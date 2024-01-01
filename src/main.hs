@@ -174,7 +174,7 @@ compile (While bexp stms1 : stms) = compB bexp ++ [Branch (compile stms1 ++ [Loo
 parse :: String -> Program
 parse str = case parseStms (myLexer str) of
   (stms, []) -> stms
-  _ -> error "Invalid syntax boas"
+  _ -> error "Invalid syntax"
 
 -- Parser
 
